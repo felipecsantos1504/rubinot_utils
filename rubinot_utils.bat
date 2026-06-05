@@ -84,6 +84,7 @@ if "%lang%"=="en-US" (
     set "m_no_logs=[No Logs]"
     set "m_active=[Active: "
     set "m_no_nick=No Nick Defined"
+    set "m_refresh=[R] Refresh List"
 ) else (
     set "m_title=PAINEL DE FERRAMENTAS RECURSOS RUBINOT 2.0"
     set "m_char_util=--- Utilitarios de Personagem ---"
@@ -101,6 +102,7 @@ if "%lang%"=="en-US" (
     set "m_no_logs=[Sem Registros]"
     set "m_active=[Ativo em: "
     set "m_no_nick=Sem Apelido"
+    set "m_refresh=[R] Atualizar Lista"
 )
 
 echo ======================================================
@@ -137,19 +139,20 @@ goto Main
 
 
 rem ===========================================================================
-rem               4. MOTOR DINÂMICO DE ESCANEAMENTO E ORDENAÇÃO
+rem               4. MOTOR DE ESCANEAMENTO POR WHITELIST E ORDENAÇÃO
 rem ===========================================================================
 :BuildListing
 set "manifest=%temp%\rubinot_sync_%random%.txt"
 if exist "%manifest%" del "%manifest%"
 
+rem --- LÊ DIRETAMENTE AS DATAS DOS ARQUIVOS sellAllWhitelist.json ---
 for /f "tokens=*" %%D in ('dir /ad /b') do (
     set "fileDate=00/00/0000"
     set "fileTime=00:00"
     set "sortKey=00000000000000"
     
-    for /f "tokens=1,2" %%A in ('dir "%%D" /a-d /o-d /tw 2^>nul ^| findstr /R /C:"^[0-9]"') do (
-        if "!sortKey!"=="00000000000000" (
+    if exist "%%D\sellAllWhitelist.json" (
+        for /f "tokens=1,2" %%A in ('dir "%%D\sellAllWhitelist.json" /t:w ^| findstr /R /C:"^[0-9]"') do (
             set "fileDate=%%A"
             set "fileTime=%%B"
             set "d=%%A"
@@ -173,7 +176,6 @@ for /f "tokens=1,2,3 delims=|" %%I in ('sort /r "%manifest%"') do (
             set "currAlias=%%A"
         )
         
-        rem --- FALLBACK SE O APELIDO NÃO ESTIVER DEFINIDO ---
         if "!currAlias!"=="" (
             set "currAlias=%m_no_nick%"
         )
@@ -189,6 +191,7 @@ for /f "tokens=1,2,3 delims=|" %%I in ('sort /r "%manifest%"') do (
 )
 if exist "%manifest%" del "%manifest%"
 
+rem --- DIRECIONAMENTO DAS ROTINAS ---
 if /i "%choice%"=="A" goto CopyAllOptions
 if /i "%choice%"=="C" goto GlobalToCharLoot
 if /i "%choice%"=="L" goto FetchToGlobalLoot
@@ -213,7 +216,7 @@ if "%lang%"=="en-US" (
     echo This action will completely replace the destination's layouts,
     echo hotkeys, windows, loot systems, and helpers with the source.
     echo.
-    set "p_src=Select SOURCE folder to copy FROM (1-%count% or B): "
+    set "p_src=Select SOURCE folder to copy FROM (1-%count%, R to Refresh or B to Back): "
     set "p_dst=Select DESTINATION folder to overwrite (1-%count%): "
     set "m_err1=[!] Invalid selection."
     set "m_err2=[!] Source and Destination cannot be the same."
@@ -226,7 +229,7 @@ if "%lang%"=="en-US" (
     echo Esta acao ira substituir completamente os layouts, hotkeys,
     echo janelas, sistemas de loot e helpers do destino pelos da origem.
     echo.
-    set "p_src=Selecione a pasta de ORIGEM (1-%count% ou B): "
+    set "p_src=Selecione a pasta de ORIGEM (1-%count%, R para Atualizar ou B para Voltar): "
     set "p_dst=Selecione a pasta de DESTINO que sera sobrescrita (1-%count%): "
     set "m_err1=[!] Selecao invalida."
     set "m_err2=[!] A Origem e o Destino nao podem ser iguais."
@@ -234,11 +237,13 @@ if "%lang%"=="en-US" (
 )
 
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo %m_refresh%
 echo [B] Back/Voltar
 echo.
 set /p "srcChoice=%p_src%"
 
 if /i "%srcChoice%"=="B" goto Main
+if /i "%srcChoice%"=="R" goto BuildListing
 for %%F in ("!srcChoice!") do set "src=!folder[%%~F]!"
 if "!src!"=="" (echo %m_err1% & pause & goto CopyAllOptions)
 
@@ -271,7 +276,7 @@ if "%lang%"=="en-US" (
     echo ======================================================
     echo.
     set "m_no_mst=[ERROR] No master files found in global toolkit folder: "
-    set "p_tgt=Select target character folder to update (1-%count% or B): "
+    set "p_tgt=Select target character folder to update (1-%count%, R to Refresh or B to Back): "
     set "m_err1=[!] Invalid selection."
     set "m_ok1=[+] Successfully applied: "
     set "m_fail=[!] Deployment failed. Master files missing during operation."
@@ -282,7 +287,7 @@ if "%lang%"=="en-US" (
     echo ======================================================
     echo.
     set "m_no_mst=[ERRO] Arquivos master nao encontrados na pasta global: "
-    set "p_tgt=Selecione o personagem alvo para atualizar (1-%count% ou B): "
+    set "p_tgt=Selecione o personagem alvo para atualizar (1-%count%, R para Atualizar ou B para Voltar): "
     set "m_err1=[!] Selecao invalida."
     set "m_ok1=[+] Aplicado com sucesso: "
     set "m_fail=[!] Falha na implantacao. Arquivos master sumiram durante a operacao."
@@ -295,11 +300,13 @@ if not exist "%masterLootFile1%" if not exist "%masterLootFile2%" (
 )
 
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo %m_refresh%
 echo [B] Back/Voltar
 echo.
 set /p "destChoice=%p_tgt%"
 
 if /i "%destChoice%"=="B" goto Main
+if /i "%destChoice%"=="R" goto BuildListing
 for %%F in ("!destChoice!") do set "dstFolder=!folder[%%~F]!"
 if "!dstFolder!"=="" (echo %m_err1% & pause & goto GlobalToCharLoot)
 
@@ -332,7 +339,7 @@ if "%lang%"=="en-US" (
     echo       UPDATE MASTER LOOT CONFIG (FETCH TO GLOBAL)
     echo ======================================================
     echo.
-    set "p_fch=Select character folder to fetch config FROM (1-%count% or B): "
+    set "p_fch=Select character folder to fetch config FROM (1-%count%, R to Refresh or B to Back): "
     set "m_err1=[!] Invalid selection."
     set "m_ok2=[+] Successfully fetched: "
     set "m_none=[!] No configuration files found inside the selected character folder."
@@ -342,7 +349,7 @@ if "%lang%"=="en-US" (
     echo       ATUALIZAR MASTER LOOT CONFIG (PULL PARA GLOBAL)
     echo ======================================================
     echo.
-    set "p_fch=Selecione o personagem de onde extrair a config (1-%count% ou B): "
+    set "p_fch=Selecione o personagem de onde extrair a config (1-%count%, R para Atualizar ou B para Voltar): "
     set "m_err1=[!] Selecao invalida."
     set "m_ok2=[+] Extraido com sucesso: "
     set "m_none=[!] Nenhum arquivo de config encontrado na pasta do personagem selecionado."
@@ -350,11 +357,13 @@ if "%lang%"=="en-US" (
 )
 
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo %m_refresh%
 echo [B] Back/Voltar
 echo.
 set /p "srcChoice=%p_fch%"
 
 if /i "%srcChoice%"=="B" goto Main
+if /i "%srcChoice%"=="R" goto BuildListing
 for %%F in ("!srcChoice!") do set "srcFolder=!folder[%%~F]!"
 if "!srcFolder!"=="" (echo %m_err1% & pause & goto FetchToGlobalLoot)
 
@@ -400,7 +409,7 @@ if "%lang%"=="en-US" (
     set "m_err1=[!] Invalid selection."
     set "m_miss=[ERROR] Expected path missing: "
     set "m_title_dst=Select Destination Character Folder:"
-    set "p_hdst=Select target character folder number (1-%count%): "
+    set "p_hdst=Select target character folder number (1-%count%, R to Refresh): "
     set "m_dep=Deploying helper setting to destination..."
 ) else (
     echo ======================================================
@@ -414,7 +423,7 @@ if "%lang%"=="en-US" (
     set "m_err1=[!] Selecao invalida."
     set "m_miss=[ERRO] O caminho esperado nao existe: "
     set "m_title_dst=Selecione a Pasta do Personagem de Destino:"
-    set "p_hdst=Selecione o numero do personagem alvo (1-%count%): "
+    set "p_hdst=Selecione o numero do personagem alvo (1-%count%, R para Atualizar): "
     set "m_dep=Implantando configuracoes de helper no destino..."
 )
 
@@ -436,15 +445,22 @@ if not exist "%sourceHelper%" (
     pause & goto VocationMenu
 )
 
+:VocationDstLoop
 cls
 echo %m_title_dst%
 echo ------------------------------------------------------
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo %m_refresh%
 echo.
 set /p "helperDest=%p_hdst%"
 
+if /i "%helperDest%"=="R" (
+    rem Temporariamente redireciona para atualizar as pastas, depois volta para cá
+    goto BuildListing
+)
+
 for %%F in ("!helperDest!") do set "targetCharFolder=!folder[%%~F]!"
-if "%targetCharFolder%"=="" (echo %m_err1% & pause & goto VocationMenu)
+if "%targetCharFolder%"=="" (echo %m_err1% & pause & goto VocationDstLoop)
 
 echo.
 echo %m_dep%
@@ -460,7 +476,7 @@ if "%lang%"=="en-US" (
     echo       EXPORT CHARACTER HELPER TO VOCATION MASTER
     echo ======================================================
     echo.
-    set "p_uch=Select character folder to export helper FROM (1-%count% or B): "
+    set "p_uch=Select character folder to export helper FROM (1-%count%, R to Refresh or B to Back): "
     set "m_err1=[!] Invalid selection."
     set "m_no_hlp=[ERROR] No helper.json file found inside this character folder."
     set "m_title_voc=Select Target Vocation Master Template to Overwrite:"
@@ -471,7 +487,7 @@ if "%lang%"=="en-US" (
     echo       EXPORTAR HELPER DE PERSONAGEM PARA MASTER VOCACAO
     echo ======================================================
     echo.
-    set "p_uch=Selecione o personagem de onde exportar o helper (1-%count% ou B): "
+    set "p_uch=Selecione o personagem de onde exportar o helper (1-%count%, R para Atualizar ou B para Voltar): "
     set "m_err1=[!] Selecao invalida."
     set "m_no_hlp=[ERRO] Nenhum arquivo helper.json encontrado na pasta deste personagem."
     set "m_title_voc=Selecione o Template Master de Vocacao que sera Sobrescrito:"
@@ -480,11 +496,13 @@ if "%lang%"=="en-US" (
 )
 
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo %m_refresh%
 echo [B] Back/Voltar
 echo.
 set /p "srcChoice=%p_uch%"
 
 if /i "%srcChoice%"=="B" goto Main
+if /i "%srcChoice%"=="R" goto BuildListing
 for %%F in ("!srcChoice!") do set "srcFolder=!folder[%%~F]!"
 if "!srcFolder!"=="" (echo %m_err1% & pause & goto BackupCharHelperToVoc)
 
@@ -529,7 +547,7 @@ if "%lang%"=="en-US" (
     echo               CHARACTER FOLDER ALIAS MANAGER
     echo ======================================================
     echo.
-    set "p_mng=Select folder number to manage (1-%count% or B): "
+    set "p_mng=Select folder number to manage (1-%count%, R to Refresh or B to Back): "
     set "m_err1=[!] Invalid selection."
     set "p_name=Enter character name/alias (Leave blank to remove): "
     set "m_sv=[+] Saved nickname linked to Character ID: "
@@ -539,7 +557,7 @@ if "%lang%"=="en-US" (
     echo               GERENCIADOR DE APELIDOS DE PERSONAGEM
     echo ======================================================
     echo.
-    set "p_mng=Selecione o numero da pasta para gerenciar (1-%count% ou B): "
+    set "p_mng=Selecione o numero da pasta para gerenciar (1-%count%, R para Atualizar ou B para Voltar): "
     set "m_err1=[!] Selecao invalida."
     set "p_name=Insira o nome/apelido do personagem (Deixe em branco para remover): "
     set "m_sv=[+] Apelido salvo e vinculado ao ID do Personagem: "
@@ -547,11 +565,13 @@ if "%lang%"=="en-US" (
 )
 
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo %m_refresh%
 echo [B] Back/Voltar
 echo.
 set /p "aliasChoice=%p_mng%"
 
 if /i "%aliasChoice%"=="B" goto Main
+if /i "%aliasChoice%"=="R" goto BuildListing
 for %%F in ("!aliasChoice!") do set "targetRawFolder=!folder[%%~F]!"
 if "%targetRawFolder%"=="" (echo %m_err1% & pause & goto ManageAliases)
 
