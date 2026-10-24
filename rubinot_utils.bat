@@ -14,7 +14,7 @@ if %errorLevel% == 0 (
 
 :RequestAdmin
 echo ======================================================
-echo       SOLICITANDO PRIVILÉGIOS DE ADMINISTRADOR...
+echo       SOLICITANDO PRIVILEGIOS DE ADMINISTRADOR...
 echo ======================================================
 echo.
 echo Este script requer direitos de admin para acessar a pasta Program Files.
@@ -55,6 +55,9 @@ rem ===========================================================================
 cls
 cd /d "%base%"
 
+rem --- RESETAR VARIÁVEIS DE CONTROLE ---
+set "copyMode="
+
 rem --- CARREGAR CONFIGURAÇÕES DO JSON ---
 set "maxDisplay=10"
 for /f "usebackq tokens=*" %%A in (`powershell -Command "$j = Get-Content '%jsonFile%' -ErrorAction SilentlyContinue | ConvertFrom-Json; if ($j.configs.max_display_limit) { $j.configs.max_display_limit } else { '10' }"`) do (
@@ -70,7 +73,7 @@ rem --- TEXTOS DE TRADUÇÃO (DICTIONARY) ---
 if "%lang%"=="en-US" (
     set "m_title=RUBINOT 2.0 CHARACTER TOOLKIT"
     set "m_char_util=--- Character Utilities ---"
-    set "m_opt_a= [A] Copy All Options (Window Position, Loot, Helper)"
+    set "m_opt_a= [A] Copy Options (All or Except Helpers/Wheel)"
     set "m_opt_c= [C] Copy Master Loot Config to Character"
     set "m_opt_h= [H] Copy RTC Helper From Vocation"
     set "m_gen_util=--- General Utilities ---"
@@ -88,7 +91,7 @@ if "%lang%"=="en-US" (
 ) else (
     set "m_title=PAINEL DE FERRAMENTAS RECURSOS RUBINOT 2.0"
     set "m_char_util=--- Utilitarios de Personagem ---"
-    set "m_opt_a= [A] Copiar Todas Opcoes (Posicao de Tela, Loot, Helper)"
+    set "m_opt_a= [A] Copiar Opcoes (Completo ou Exceto Helpers/Wheel)"
     set "m_opt_c= [C] Copiar Master Loot Config para o Personagem"
     set "m_opt_h= [H] Copiar RTC Helper de uma Vocacao"
     set "m_gen_util=--- Utilitarios Gerais ---"
@@ -124,9 +127,10 @@ echo.
 echo ------------------------------------------------------
 echo %m_opt_x%
 echo ======================================================
+set "choice="
 set /p "choice=%m_select%"
 
-if /i "%choice%"=="A" goto BuildListing
+if /i "%choice%"=="A" goto CopyMenu
 if /i "%choice%"=="C" goto BuildListing
 if /i "%choice%"=="H" goto BuildListing
 if /i "%choice%"=="L" goto BuildListing
@@ -139,13 +143,13 @@ goto Main
 
 
 rem ===========================================================================
-rem               4. MOTOR DE ESCANEAMENTO POR WHITELIST E ORDENAÇÃO
+rem               4. MOTOR DE ESCANEAMENTO DE PASTAS
 rem ===========================================================================
 :BuildListing
 set "manifest=%temp%\rubinot_sync_%random%.txt"
 if exist "%manifest%" del "%manifest%"
 
-rem --- LÊ DIRETAMENTE AS DATAS DOS ARQUIVOS sellAllWhitelist.json ---
+rem --- LÊ DATAS DOS ARQUIVOS ---
 for /f "tokens=*" %%D in ('dir /ad /b') do (
     set "fileDate=00/00/0000"
     set "fileTime=00:00"
@@ -191,8 +195,15 @@ for /f "tokens=1,2,3 delims=|" %%I in ('sort /r "%manifest%"') do (
 )
 if exist "%manifest%" del "%manifest%"
 
-rem --- DIRECIONAMENTO DAS ROTINAS ---
-if /i "%choice%"=="A" goto CopyAllOptions
+rem --- DIRECIONAMENTO APÓS CARREGAR A LISTA ---
+if /i "%copyMode%"=="ALL" (
+    set "copyMode="
+    goto ExecCopyAll
+)
+if /i "%copyMode%"=="EXCEPT" (
+    set "copyMode="
+    goto ExecCopyExcept
+)
 if /i "%choice%"=="C" goto GlobalToCharLoot
 if /i "%choice%"=="L" goto FetchToGlobalLoot
 if /i "%choice%"=="H" goto VocationMenu
@@ -205,57 +216,112 @@ rem ===========================================================================
 rem               5. CONTROLADORES DE AÇÃO (MÓDULOS)
 rem ===========================================================================
 
-rem --- MÓDULO [A]: CLONAGEM TOTAL DE PERFIL ---
-:CopyAllOptions
+rem --- SUBMENU DA OPÇÃO [A] ---
+:CopyMenu
 cls
 if "%lang%"=="en-US" (
     echo ======================================================
-    echo       COPY ALL OPTIONS (WINDOWS, LOOT, HELPER)
+    echo           COPY OPTIONS SUBMENU
     echo ======================================================
     echo.
-    echo This action will completely replace the destination's layouts,
-    echo hotkeys, windows, loot systems, and helpers with the source.
+    echo  [1] Copy ALL files from source to destination folder
+    echo  [2] Copy ALL files EXCEPT helper.json and wheelOfDestiny.json
+    echo  [3] Back to Main Menu
     echo.
-    set "p_src=Select SOURCE folder to copy FROM (1-%count%, R to Refresh or B to Back): "
+    set "m_sub_sel=Select an option (1-3): "
+) else (
+    echo ======================================================
+    echo           SUBMENU DE OPCOES DE COPIA (OPCAO A)
+    echo ======================================================
+    echo.
+    echo  [1] Copiar TODOS os arquivos da pasta de origem para o destino
+    echo  [2] Copiar TODOS os arquivos EXCETO helper.json e wheelOfDestiny.json
+    echo  [3] Voltar ao Menu Principal
+    echo.
+    set "m_sub_sel=Selecione uma opcao (1-3): "
+)
+set "subChoice="
+set /p "subChoice=%m_sub_sel%"
+
+if "%subChoice%"=="1" (
+    set "copyMode=ALL"
+    goto BuildListing
+)
+if "%subChoice%"=="2" (
+    set "copyMode=EXCEPT"
+    goto BuildListing
+)
+if "%subChoice%"=="3" goto Main
+goto CopyMenu
+
+
+rem --- MÓDULO [A-1]: COPIAR TUDO COM CONFIRMAÇÃO DE NICKNAMES ---
+:ExecCopyAll
+cls
+if "%lang%"=="en-US" (
+    echo ======================================================
+    echo       COPY ALL FILES (ABSOLUTE MIRROR)
+    echo ======================================================
+    echo.
+    set "p_src=Select SOURCE folder (1-%count%, R to Refresh or B to Back): "
     set "p_dst=Select DESTINATION folder to overwrite (1-%count%): "
     set "m_err1=[!] Invalid selection."
     set "m_err2=[!] Source and Destination cannot be the same."
-    set "m_run=Cloning absolute profile configuration..."
+    set "m_run=Copying all files..."
+    set "y_char=Y"
 ) else (
     echo ======================================================
-    echo       COPIAR TODAS OPCOES (TELAS, LOOT, HELPER)
+    echo       COPIAR TODOS OS ARQUIVOS (ESPELHAMENTO COMPLETO)
     echo ======================================================
-    echo.
-    echo Esta acao ira substituir completamente os layouts, hotkeys,
-    echo janelas, sistemas de loot e helpers do destino pelos da origem.
     echo.
     set "p_src=Selecione a pasta de ORIGEM (1-%count%, R para Atualizar ou B para Voltar): "
     set "p_dst=Selecione a pasta de DESTINO que sera sobrescrita (1-%count%): "
     set "m_err1=[!] Selecao invalida."
     set "m_err2=[!] A Origem e o Destino nao podem ser iguais."
-    set "m_run=Clonando configuracao absoluta do perfil..."
+    set "m_run=Copiando todos os arquivos..."
+    set "y_char=S"
 )
 
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
 echo %m_refresh%
 echo [B] Back/Voltar
 echo.
+set "srcChoice="
 set /p "srcChoice=%p_src%"
 
 if /i "%srcChoice%"=="B" goto Main
 if /i "%srcChoice%"=="R" goto BuildListing
-for %%F in ("!srcChoice!") do set "src=!folder[%%~F]!"
-if "!src!"=="" (echo %m_err1% & pause & goto CopyAllOptions)
+for %%F in ("!srcChoice!") do (
+    set "src=!folder[%%~F]!"
+    set "src_name=!folder_meta[%%~F]!"
+)
+if "!src!"=="" (echo %m_err1% & pause & goto ExecCopyAll)
 
 echo.
+for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo.
+set "destChoice="
 set /p "destChoice=%p_dst%"
-for %%F in ("!destChoice!") do set "dst=!folder[%%~F]!"
-if "!dst!"=="" (echo %m_err1% & pause & goto CopyAllOptions)
+for %%F in ("!destChoice!") do (
+    set "dst=!folder[%%~F]!"
+    set "dst_name=!folder_meta[%%~F]!"
+)
+if "!dst!"=="" (echo %m_err1% & pause & goto ExecCopyAll)
 
 if "!src!"=="!dst!" (
     echo %m_err2%
-    pause & goto CopyAllOptions
+    pause & goto ExecCopyAll
 )
+
+echo.
+echo ------------------------------------------------------
+if "%lang%"=="en-US" (
+    set /p "confirm=Do you want to copy files from to [Destination: !dst_name!]? (Y/N): "
+) else (
+    set /p "confirm=Deseja copiar os arquivos de [Origem: !src_name!] para [Destino: !dst_name!]? (S/N): "
+)
+
+if /i not "%confirm%"=="%y_char%" goto Main
 
 echo.
 echo %m_run%
@@ -263,7 +329,81 @@ robocopy "!src!" "!dst!" /MIR /Z /ETA
 goto EndAction
 
 
-rem --- MÓDULO [C]: COPIAR CONFIGURAÇÃO MASTER LOOT PARA PERSONAGEM ---
+rem --- MÓDULO [A-2]: COPIAR EXCETO HELPER E WHEEL ---
+:ExecCopyExcept
+cls
+if "%lang%"=="en-US" (
+    echo ======================================================
+    echo       COPY ALL FILES EXCEPT HELPER/WHEEL
+    echo ======================================================
+    echo.
+    set "p_src=Select SOURCE folder (1-%count%, R to Refresh or B to Back): "
+    set "p_dst=Select DESTINATION folder to overwrite (1-%count%): "
+    set "m_err1=[!] Invalid selection."
+    set "m_err2=[!] Source and Destination cannot be the same."
+    set "m_run=Copying files (excluding helper.json and wheelOfDestiny.json)..."
+    set "y_char=Y"
+) else (
+    echo ======================================================
+    echo       COPIAR TUDO EXCETO HELPER E WHEEL
+    echo ======================================================
+    echo.
+    set "p_src=Selecione a pasta de ORIGEM (1-%count%, R para Atualizar ou B para Voltar): "
+    set "p_dst=Selecione a pasta de DESTINO que sera sobrescrita (1-%count%): "
+    set "m_err1=[!] Selecao invalida."
+    set "m_err2=[!] A Origem e o Destino nao podem ser iguais."
+    set "m_run=Copiando arquivos (excluindo helper.json e wheelOfDestiny.json)..."
+    set "y_char=S"
+)
+
+for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo %m_refresh%
+echo [B] Back/Voltar
+echo.
+set "srcChoice="
+set /p "srcChoice=%p_src%"
+
+if /i "%srcChoice%"=="B" goto Main
+if /i "%srcChoice%"=="R" goto BuildListing
+for %%F in ("!srcChoice!") do (
+    set "src=!folder[%%~F]!"
+    set "src_name=!folder_meta[%%~F]!"
+)
+if "!src!" Boot=="" if "!src!"=="" (echo %m_err1% & pause & goto ExecCopyExcept)
+
+echo.
+for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
+echo.
+set "destChoice="
+set /p "destChoice=%p_dst%"
+for %%F in ("!destChoice!") do (
+    set "dst=!folder[%%~F]!"
+    set "dst_name=!folder_meta[%%~F]!"
+)
+if "!dst!"=="" (echo %m_err1% & pause & goto ExecCopyExcept)
+
+if "!src!"=="!dst!" (
+    echo %m_err2%
+    pause & goto ExecCopyExcept
+)
+
+echo.
+echo ------------------------------------------------------
+if "%lang%"=="en-US" (
+    set /p "confirm=Do you want to copy files from to [Destination: !dst_name!]? (Y/N): "
+) else (
+    set /p "confirm=Deseja copiar os arquivos de [Origem: !src_name!] para [Destino: !dst_name!]? (S/N): "
+)
+
+if /i not "%confirm%"=="%y_char%" goto Main
+
+echo.
+echo %m_run%
+robocopy "!src!" "!dst!" /XF "helper.json" "wheelOfDestiny.json" /MIR /Z /ETA
+goto EndAction
+
+
+rem --- MÓDULO [C]: COPIAR MASTER LOOT CONFIG PARA PERSONAGEM ---
 :GlobalToCharLoot
 cls
 set "lootSrcDir=%scriptDir%loot"
@@ -303,6 +443,7 @@ for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
 echo %m_refresh%
 echo [B] Back/Voltar
 echo.
+set "destChoice="
 set /p "destChoice=%p_tgt%"
 
 if /i "%destChoice%"=="B" goto Main
@@ -331,7 +472,7 @@ if "!copiedLoot!"=="0" (
 goto EndAction
 
 
-rem --- MÓDULO [L]: PUXAR LOOT DE UM PERSONAGEM PARA O REPOSITÓRIO MASTER ---
+rem --- MÓDULO [L]: PUXAR LOOT PARA O MASTER ---
 :FetchToGlobalLoot
 cls
 if "%lang%"=="en-US" (
@@ -360,6 +501,7 @@ for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
 echo %m_refresh%
 echo [B] Back/Voltar
 echo.
+set "srcChoice="
 set /p "srcChoice=%p_fch%"
 
 if /i "%srcChoice%"=="B" goto Main
@@ -394,7 +536,7 @@ if "!foundLoot!"=="0" (
 goto EndAction
 
 
-rem --- MÓDULO [H]: INJEÇÃO DE HELPER POR VOCAÇÃO ---
+rem --- MÓDULO [H]: RTC HELPER POR VOCAÇÃO ---
 :VocationMenu
 cls
 if "%lang%"=="en-US" (
@@ -452,10 +594,10 @@ echo ------------------------------------------------------
 for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
 echo %m_refresh%
 echo.
+set "helperDest="
 set /p "helperDest=%p_hdst%"
 
 if /i "%helperDest%"=="R" (
-    rem Temporariamente redireciona para atualizar as pastas, depois volta para cá
     goto BuildListing
 )
 
@@ -468,7 +610,7 @@ xcopy /Y /F "%sourceHelper%" "%base%\%targetCharFolder%\"
 goto EndAction
 
 
-rem --- MÓDULO [U]: EXPORTAR HELPER DE PERSONAGEM PARA MASTER VOCAÇÃO ---
+rem --- MÓDULO [U]: EXPORTAR HELPER PARA MASTER VOCAÇÃO ---
 :BackupCharHelperToVoc
 cls
 if "%lang%"=="en-US" (
@@ -499,6 +641,7 @@ for /l %%X in (1,1,%count%) do (echo [%%X] !folder_meta[%%X]!)
 echo %m_refresh%
 echo [B] Back/Voltar
 echo.
+set "srcChoice="
 set /p "srcChoice=%p_uch%"
 
 if /i "%srcChoice%"=="B" goto Main
@@ -578,7 +721,7 @@ if "%targetRawFolder%"=="" (echo %m_err1% & pause & goto ManageAliases)
 echo.
 echo ID: %targetRawFolder%
 set /p "newAlias=%p_name%"
-set "newAlias=%newAlias:"=%"
+if defined newAlias set "newAlias=%newAlias:"=%"
 
 set "PS_KEY=%targetRawFolder%"
 set "PS_VAL=%newAlias%"
@@ -618,10 +761,11 @@ if "%lang%"=="en-US" (
     echo (Voce pode aumentar isso para ate 10 personagens)
     echo.
     set "p_lim=Insira o novo limite (1-10) ou pressione enter para manter o atual: "
-    set "m_inv=[!] Entrada invalida. Por favor, insira um numero valido entre 1 and 10."
-    set "m_ok=[+] Limite de exibicao updated com sucesso."
+    set "m_inv=[!] Entrada invalida. Por favor, insira um numero valido entre 1 e 10."
+    set "m_ok=[+] Limite de exibicao atualizado com sucesso."
 )
 
+set "newLimit="
 set /p "newLimit=%p_lim%"
 if "%newLimit%"=="" goto Main
 
@@ -638,7 +782,7 @@ pause
 goto Main
 
 
-rem --- MÓDULO [G]: GERENCIADOR DE IDIOMA DO SCRIPT ---
+rem --- MÓDULO [G]: ALTERAR IDIOMA ---
 :ConfigLanguage
 cls
 echo ======================================================
@@ -661,7 +805,7 @@ goto Main
 
 
 rem ===========================================================================
-rem               6. FINALIZAÇÃO DAS PIPELINES DE AÇÃO
+rem               6. FINALIZAÇÃO
 rem ===========================================================================
 :EndAction
 echo.
